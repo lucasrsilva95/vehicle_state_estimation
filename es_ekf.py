@@ -154,11 +154,6 @@ def measurement_update(sensor_var, p_cov_check, y_k, p_check, v_check, q_check):
     p_hat = p_check + delta_pk
     v_hat = v_check + delta_vk
 
-    #Quaternion of the angle error state d_Phi
-    #q_Phi = Quaternion(axis_angle=angle_normalize(delta_qk))
-
-    # Quaternion multiplication q(q_Phi) x q_check
-    #q_hat = Quaternion(*q_check).quat_mult_right(q_Phi)
     q_hat = Quaternion(euler=delta_qk).quat_mult_right(q_check)
 
     # 3.4 Compute corrected covariance
@@ -174,8 +169,6 @@ def measurement_update(sensor_var, p_cov_check, y_k, p_check, v_check, q_check):
 ################################################################################################
 for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial prediction from gt
     delta_t = imu_f.t[k] - imu_f.t[k - 1]
-    #f_imu = imu_f.data
-    #w = imu_w.data[k-1]
     C_ns = Quaternion(*q_est[k-1]).to_mat()
 
     #1. Update state with IMU inputs
@@ -186,22 +179,12 @@ for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial predic
 
     theta = imu_w.data[k-1] * delta_t
 
-    # Quaternion of theta = delta_t * Omega[k-1]
-    #q_theta = Quaternion(axis_angle= angle_normalize(theta))
-
-    # Quaternion Multiplication: q[k-1] x q_theta
-    #q_check = Quaternion(*q_est[k-1]).quat_mult_right(q_theta)
     q_check = Quaternion(axis_angle= theta).quat_mult_right(q_est[k-1])
-
-    #q_prod = np.array([[np.sin(abs(theta)/2)], 
-    #                    [(theta/abs(theta))*np.cos(abs(theta)/2)]])
-    #q_est[k] = q_est[k-1] @ q_prod
     
     # 1.1 Linearize the motion model and compute Jacobians
     F_k = np.eye(9)
     F_k[0:3, 3:6] = delta_t * np.eye(3)
     F_k[3:6, 6:9] = -(C_ns@skew_symmetric(imu_f.data[k-1].reshape((3,1)))) * delta_t
-    #F_k[3:6, 6:9] = -(skew_symmetric(C_ns @ imu_f.data[k-1].reshape((3,1)))) * delta_t
 
     L_k = np.zeros((9,6))
     L_k[3:, :] = np.eye(6)
@@ -210,13 +193,8 @@ for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial predic
     vfw = var_imu_w ** 2
     Q_k = delta_t**2*np.diag([vfa,vfa,vfa,vfw,vfw,vfw])  
 
-    # Q_k = np.eye(6)  
-    # Q_k[:3, :3] = (var_imu_f**2) * np.eye(3)
-    # Q_k[3:, 3:] = (var_imu_w**2) * np.eye(3)
-    # Q_k *= delta_t**2
 
     # 2. Propagate uncertainty
-    #p_cov_check = F_k@p_cov[k-1]@F_k.T + L_k@Q_k@L_k.T
     p_cov_check = F_k@p_cov[k-1]@F_k.T + l_jac@Q_k@l_jac.T
     
 
@@ -227,14 +205,12 @@ for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial predic
         yk = lidar.data[lidar_i]
         p_check, v_check, q_check, p_cov_check = measurement_update(var_lidar, p_cov_check, yk, p_check, v_check, q_check)
         lidar_i += 1
-        print("Lidar Correction")
 
-    # # Check for GNSS data
+    # Check for GNSS data
     if imu_f.t[k-1] == gnss.t[gnss_i] and gnss_i < len(gnss.t) - 1:
         yk = gnss.data[gnss_i]
         p_check, v_check, q_check, p_cov_check = measurement_update(var_gnss, p_cov_check, yk, p_check, v_check, q_check)
         gnss_i += 1
-        print("GNSS Correction")
 
     # Update states (save)
     p_est[k, :] = p_check
