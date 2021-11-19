@@ -52,15 +52,15 @@ lidar = data['lidar']
 # Let's plot the ground truth trajectory to see what it looks like. When you're testing your
 # code later, feel free to comment this out.
 ################################################################################################
-# gt_fig = plt.figure()
-# ax = gt_fig.add_subplot(111, projection='3d')
-# ax.plot(gt.p[:,0], gt.p[:,1], gt.p[:,2])
-# ax.set_xlabel('x [m]')
-# ax.set_ylabel('y [m]')
-# ax.set_zlabel('z [m]')
-# ax.set_title('Ground Truth trajectory')
-# ax.set_zlim(-1, 5)
-# plt.show()
+gt_fig = plt.figure()
+ax = gt_fig.add_subplot(111, projection='3d')
+ax.plot(gt.p[:,0], gt.p[:,1], gt.p[:,2])
+ax.set_xlabel('x [m]')
+ax.set_ylabel('y [m]')
+ax.set_zlabel('z [m]')
+ax.set_title('Ground Truth trajectory')
+ax.set_zlim(-1, 5)
+plt.show()
 
 ################################################################################################
 # Remember that our LIDAR data is actually just a set of positions estimated from a separate
@@ -142,7 +142,8 @@ def measurement_update(sensor_var, p_cov_check, y_k, p_check, v_check, q_check):
     
     # 3.1 Compute Kalman Gain
     R = np.eye(3) * sensor_var
-    K_k = p_cov_check@h_jac.T@pinv(h_jac@p_cov_check@h_jac.T + R)
+    K_k = p_cov_check @ h_jac.T @ inv(h_jac @ p_cov_check @ h_jac.T + R)
+
     # 3.2 Compute error state
     delta_x = K_k@(y_k - p_check)
 
@@ -153,11 +154,10 @@ def measurement_update(sensor_var, p_cov_check, y_k, p_check, v_check, q_check):
 
     p_hat = p_check + delta_pk
     v_hat = v_check + delta_vk
-
-    q_hat = Quaternion(euler=delta_qk).quat_mult_right(q_check)
+    q_hat = Quaternion(axis_angle = delta_qk).quat_mult_right(q_check)
 
     # 3.4 Compute corrected covariance
-    p_cov_hat = (np.eye(9) - K_k@h_jac)@p_cov_check
+    p_cov_hat = (np.eye(9) - K_k @ h_jac) @ p_cov_check
 
     return p_hat, v_hat, q_hat, p_cov_hat
 
@@ -186,9 +186,6 @@ for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial predic
     F_k[0:3, 3:6] = delta_t * np.eye(3)
     F_k[3:6, 6:9] = -(C_ns@skew_symmetric(imu_f.data[k-1].reshape((3,1)))) * delta_t
 
-    L_k = np.zeros((9,6))
-    L_k[3:, :] = np.eye(6)
-
     vfa = var_imu_f ** 2
     vfw = var_imu_w ** 2
     Q_k = delta_t**2*np.diag([vfa,vfa,vfa,vfw,vfw,vfw])  
@@ -201,22 +198,22 @@ for k in range(1, imu_f.data.shape[0]):  # start at 1 b/c we have initial predic
     # 3. Check availability of GNSS and LIDAR measurements
     
     # Check for LIDAR data
-    if imu_f.t[k-1] == lidar.t[lidar_i] and lidar_i < len(lidar.t) - 1:
+    if lidar_i < len(lidar.t) and imu_f.t[k-1] == lidar.t[lidar_i]:
         yk = lidar.data[lidar_i]
         p_check, v_check, q_check, p_cov_check = measurement_update(var_lidar, p_cov_check, yk, p_check, v_check, q_check)
         lidar_i += 1
 
     # Check for GNSS data
-    if imu_f.t[k-1] == gnss.t[gnss_i] and gnss_i < len(gnss.t) - 1:
+    if gnss_i < len(gnss.t) and imu_f.t[k-1] == gnss.t[gnss_i]:
         yk = gnss.data[gnss_i]
         p_check, v_check, q_check, p_cov_check = measurement_update(var_gnss, p_cov_check, yk, p_check, v_check, q_check)
         gnss_i += 1
 
     # Update states (save)
-    p_est[k, :] = p_check
-    v_est[k, :] = v_check
-    q_est[k, :] = q_check
-    p_cov[k, :] = p_cov_check
+    p_est[k] = p_check
+    v_est[k] = v_check
+    q_est[k] = q_check
+    p_cov[k] = p_cov_check
     
 #### 6. Results and Analysis ###################################################################
 
@@ -296,13 +293,13 @@ plt.show()
 ################################################################################################
 
 # # Pt. 1 submission
-# p1_indices = [9000, 9400, 9800, 10200, 10600]
-# p1_str = ''
-# for val in p1_indices:
-#     for i in range(3):
-#         p1_str += '%.3f ' % (p_est[val, i])
-# with open('pt1_submission.txt', 'w') as file:
-#     file.write(p1_str)
+p1_indices = [9000, 9400, 9800, 10200, 10600]
+p1_str = ''
+for val in p1_indices:
+    for i in range(3):
+        p1_str += '%.3f ' % (p_est[val, i])
+with open('pt1_submission.txt', 'w') as file:
+    file.write(p1_str)
 
 #Pt. 2 submission
 # p2_indices = [9000, 9400, 9800, 10200, 10600]
@@ -314,10 +311,10 @@ plt.show()
 #     file.write(p2_str)
 
 # Pt. 3 submission
-p3_indices = [6800, 7600, 8400, 9200, 10000]
-p3_str = ''
-for val in p3_indices:
-    for i in range(3):
-        p3_str += '%.3f ' % (p_est[val, i])
-with open('pt3_submission.txt', 'w') as file:
-    file.write(p3_str)
+# p3_indices = [6800, 7600, 8400, 9200, 10000]
+# p3_str = ''
+# for val in p3_indices:
+#     for i in range(3):
+#         p3_str += '%.3f ' % (p_est[val, i])
+# with open('pt3_submission.txt', 'w') as file:
+#     file.write(p3_str)
